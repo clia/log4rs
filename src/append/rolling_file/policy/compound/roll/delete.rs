@@ -2,36 +2,39 @@
 //!
 //! Requires the `delete_roller` feature.
 
+#[cfg(feature = "file")]
+use serde_derive::Deserialize;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-use append::rolling_file::policy::compound::roll::Roll;
+use crate::append::rolling_file::policy::compound::roll::Roll;
 #[cfg(feature = "file")]
-use file::{Deserialize, Deserializers};
+use crate::file::{Deserialize, Deserializers};
 
 /// Configuration for the delete roller.
 #[cfg(feature = "file")]
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct DeleteRollerConfig {
-    #[serde(skip_deserializing)] _p: (),
+    #[serde(skip_deserializing)]
+    _p: (),
 }
 
 /// A roller which deletes the log file.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DeleteRoller(());
 
 impl Roll for DeleteRoller {
-    fn roll(&self, file: &Path) -> Result<(), Box<Error + Sync + Send>> {
+    fn roll(&self, file: &Path) -> Result<(), Box<dyn Error + Sync + Send>> {
         fs::remove_file(file).map_err(Into::into)
     }
 }
 
 impl DeleteRoller {
     /// Returns a new `DeleteRoller`.
-    pub fn new() -> DeleteRoller {
-        DeleteRoller(())
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -47,7 +50,7 @@ pub struct DeleteRollerDeserializer;
 
 #[cfg(feature = "file")]
 impl Deserialize for DeleteRollerDeserializer {
-    type Trait = Roll;
+    type Trait = dyn Roll;
 
     type Config = DeleteRollerConfig;
 
@@ -55,7 +58,7 @@ impl Deserialize for DeleteRollerDeserializer {
         &self,
         _: DeleteRollerConfig,
         _: &Deserializers,
-    ) -> Result<Box<Roll>, Box<Error + Sync + Send>> {
-        Ok(Box::new(DeleteRoller::new()))
+    ) -> Result<Box<dyn Roll>, Box<dyn Error + Sync + Send>> {
+        Ok(Box::new(DeleteRoller::default()))
     }
 }

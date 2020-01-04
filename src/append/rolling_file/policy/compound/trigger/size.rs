@@ -5,22 +5,23 @@
 #[cfg(feature = "file")]
 use serde::de;
 #[cfg(feature = "file")]
-use std::ascii::AsciiExt;
+use serde_derive::Deserialize;
 use std::error::Error;
 #[cfg(feature = "file")]
 use std::fmt;
 
-use append::rolling_file::LogFile;
-use append::rolling_file::policy::compound::trigger::Trigger;
+use crate::append::rolling_file::policy::compound::trigger::Trigger;
+use crate::append::rolling_file::LogFile;
 #[cfg(feature = "file")]
-use file::{Deserialize, Deserializers};
+use crate::file::{Deserialize, Deserializers};
 
 /// Configuration for the size trigger.
 #[cfg(feature = "file")]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SizeTriggerConfig {
-    #[serde(deserialize_with = "deserialize_limit")] limit: u64,
+    #[serde(deserialize_with = "deserialize_limit")]
+    limit: u64,
 }
 
 #[cfg(feature = "file")]
@@ -111,13 +112,13 @@ impl SizeTrigger {
     /// Returns a new trigger which rolls the log once it has passed the
     /// specified size in bytes.
     pub fn new(limit: u64) -> SizeTrigger {
-        SizeTrigger { limit: limit }
+        SizeTrigger { limit }
     }
 }
 
 impl Trigger for SizeTrigger {
-    fn trigger(&self, file: &LogFile) -> Result<bool, Box<Error + Sync + Send>> {
-        Ok(file.len() > self.limit)
+    fn trigger(&self, file: &LogFile) -> Result<bool, Box<dyn Error + Sync + Send>> {
+        Ok(file.len_estimate() > self.limit)
     }
 }
 
@@ -138,7 +139,7 @@ pub struct SizeTriggerDeserializer;
 
 #[cfg(feature = "file")]
 impl Deserialize for SizeTriggerDeserializer {
-    type Trait = Trigger;
+    type Trait = dyn Trigger;
 
     type Config = SizeTriggerConfig;
 
@@ -146,7 +147,7 @@ impl Deserialize for SizeTriggerDeserializer {
         &self,
         config: SizeTriggerConfig,
         _: &Deserializers,
-    ) -> Result<Box<Trigger>, Box<Error + Sync + Send>> {
+    ) -> Result<Box<dyn Trigger>, Box<dyn Error + Sync + Send>> {
         Ok(Box::new(SizeTrigger::new(config.limit)))
     }
 }

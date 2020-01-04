@@ -1,16 +1,16 @@
 //! Filters
 
-use std::fmt;
 use log::Record;
-#[cfg(feature = "file")]
-use serde_value::Value;
 #[cfg(feature = "file")]
 use serde::de;
 #[cfg(feature = "file")]
+use serde_value::Value;
+#[cfg(feature = "file")]
 use std::collections::BTreeMap;
+use std::fmt;
 
 #[cfg(feature = "file")]
-use file::Deserializable;
+use crate::file::Deserializable;
 
 #[cfg(feature = "threshold_filter")]
 pub mod threshold;
@@ -25,7 +25,7 @@ pub trait Filter: fmt::Debug + Send + Sync + 'static {
 }
 
 #[cfg(feature = "file")]
-impl Deserializable for Filter {
+impl Deserializable for dyn Filter {
     fn name() -> &'static str {
         "filter"
     }
@@ -50,7 +50,7 @@ pub enum Response {
 }
 
 /// Configuration for a filter.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 #[cfg(feature = "file")]
 pub struct FilterConfig {
     /// The filter kind.
@@ -73,7 +73,7 @@ impl<'de> de::Deserialize<'de> for FilterConfig {
         };
 
         Ok(FilterConfig {
-            kind: kind,
+            kind,
             config: Value::Map(map),
         })
     }

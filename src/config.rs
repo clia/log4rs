@@ -1,14 +1,14 @@
 //! log4rs configuration
 
+use log::LevelFilter;
 use std::collections::HashSet;
+use std::error;
 use std::fmt;
 use std::iter::IntoIterator;
-use std::error;
-use log::LevelFilter;
 
-use append::Append;
-use filter::Filter;
-use {ConfigPrivateExt, PrivateConfigAppenderExt};
+use crate::append::Append;
+use crate::filter::Filter;
+use crate::{ConfigPrivateExt, PrivateConfigAppenderExt};
 
 /// Configuration for the root logger.
 #[derive(Debug)]
@@ -31,6 +31,11 @@ impl Root {
     /// Returns the list of names of appenders that will be attached to the root logger.
     pub fn appenders(&self) -> &[String] {
         &self.appenders
+    }
+
+    /// Sets the minimum level of log messages that the root logger will accept.
+    pub fn set_level(&mut self, level: LevelFilter) {
+        self.level = level;
     }
 }
 
@@ -63,7 +68,7 @@ impl RootBuilder {
     /// Consumes the `RootBuilder`, returning the `Root`.
     pub fn build(self, level: LevelFilter) -> Root {
         Root {
-            level: level,
+            level,
             appenders: self.appenders,
         }
     }
@@ -73,8 +78,8 @@ impl RootBuilder {
 #[derive(Debug)]
 pub struct Appender {
     name: String,
-    appender: Box<Append>,
-    filters: Vec<Box<Filter>>,
+    appender: Box<dyn Append>,
+    filters: Vec<Box<dyn Filter>>,
 }
 
 impl Appender {
@@ -89,18 +94,18 @@ impl Appender {
     }
 
     /// Returns the appender.
-    pub fn appender(&self) -> &Append {
+    pub fn appender(&self) -> &dyn Append {
         &*self.appender
     }
 
     /// Returns the filters attached to the appender.
-    pub fn filters(&self) -> &[Box<Filter>] {
+    pub fn filters(&self) -> &[Box<dyn Filter>] {
         &self.filters
     }
 }
 
 impl PrivateConfigAppenderExt for Appender {
-    fn unpack(self) -> (String, Box<Append>, Vec<Box<Filter>>) {
+    fn unpack(self) -> (String, Box<dyn Append>, Vec<Box<dyn Filter>>) {
         let Appender {
             name,
             appender,
@@ -113,12 +118,12 @@ impl PrivateConfigAppenderExt for Appender {
 /// A builder for `Appender`s.
 #[derive(Debug)]
 pub struct AppenderBuilder {
-    filters: Vec<Box<Filter>>,
+    filters: Vec<Box<dyn Filter>>,
 }
 
 impl AppenderBuilder {
     /// Adds a filter.
-    pub fn filter(mut self, filter: Box<Filter>) -> AppenderBuilder {
+    pub fn filter(mut self, filter: Box<dyn Filter>) -> AppenderBuilder {
         self.filters.push(filter);
         self
     }
@@ -126,20 +131,20 @@ impl AppenderBuilder {
     /// Adds filters.
     pub fn filters<I>(mut self, filters: I) -> AppenderBuilder
     where
-        I: IntoIterator<Item = Box<Filter>>,
+        I: IntoIterator<Item = Box<dyn Filter>>,
     {
         self.filters.extend(filters);
         self
     }
 
     /// Consumes the `AppenderBuilder`, returning the `Appender`.
-    pub fn build<T>(self, name: T, appender: Box<Append>) -> Appender
+    pub fn build<T>(self, name: T, appender: Box<dyn Append>) -> Appender
     where
         T: Into<String>,
     {
         Appender {
             name: name.into(),
-            appender: appender,
+            appender,
             filters: self.filters,
         }
     }
@@ -226,7 +231,7 @@ impl LoggerBuilder {
     {
         Logger {
             name: name.into(),
-            level: level,
+            level,
             appenders: self.appenders,
             additive: self.additive,
         }
@@ -258,6 +263,11 @@ impl Config {
     /// Returns the `Root` associated with the `Config`.
     pub fn root(&self) -> &Root {
         &self.root
+    }
+
+    /// Returns a mutable handle for the `Root` associated with the `Config`.
+    pub fn root_mut(&mut self) -> &mut Root {
+        &mut self.root
     }
 
     /// Returns the `Logger`s associated with the `Config`.
@@ -360,7 +370,7 @@ impl ConfigBuilder {
 
         let config = Config {
             appenders: ok_appenders,
-            root: root,
+            root,
             loggers: ok_loggers,
         };
 
@@ -373,7 +383,7 @@ impl ConfigBuilder {
         if errors.is_empty() {
             Ok(config)
         } else {
-            Err(Errors { errors: errors })
+            Err(Errors { errors })
         }
     }
 }
@@ -455,7 +465,8 @@ pub enum Error {
     DuplicateLoggerName(String),
     /// A logger name was invalid.
     InvalidLoggerName(String),
-    #[doc(hidden)] __Extensible,
+    #[doc(hidden)]
+    __Extensible,
 }
 
 impl fmt::Display for Error {

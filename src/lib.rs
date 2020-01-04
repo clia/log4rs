@@ -123,9 +123,6 @@
 //! Programmatically constructing a configuration:
 //!
 //! ```no_run
-//! extern crate log;
-//! extern crate log4rs;
-//!
 //! # #[cfg(all(feature = "console_appender",
 //! #           feature = "file_appender",
 //! #           feature = "pattern_encoder"))]
@@ -165,49 +162,9 @@
 #![doc(html_root_url = "https://docs.rs/log4rs/0.8")]
 #![warn(missing_docs)]
 
-extern crate arc_swap;
-#[cfg(feature = "antidote")]
-extern crate antidote;
-#[cfg(feature = "chrono")]
-extern crate chrono;
-#[cfg(feature = "flate2")]
-extern crate flate2;
-extern crate fnv;
-#[cfg(feature = "humantime")]
-extern crate humantime;
-#[cfg(all(not(windows), feature = "libc"))]
-extern crate libc;
-extern crate log;
-#[cfg(feature = "log-mdc")]
-extern crate log_mdc;
-#[cfg(feature = "serde")]
-extern crate serde;
-#[cfg(feature = "serde_json")]
-extern crate serde_json;
-#[cfg(feature = "serde-value")]
-extern crate serde_value;
-#[cfg(feature = "xml_format")]
-extern crate serde_xml_rs;
-#[cfg(feature = "serde_yaml")]
-extern crate serde_yaml;
-#[cfg(feature = "thread-id")]
-extern crate thread_id;
-#[cfg(feature = "toml")]
-extern crate toml;
-#[cfg(feature = "typemap")]
-extern crate typemap;
-#[cfg(all(windows, feature = "winapi"))]
-extern crate winapi;
-
-#[cfg(feature = "serde_derive")]
-#[macro_use]
-extern crate serde_derive;
-
-#[cfg(test)]
-extern crate tempdir;
-
 use arc_swap::ArcSwap;
 use fnv::FnvHasher;
+use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 use std::cmp;
 use std::collections::HashMap;
 use std::error;
@@ -215,21 +172,20 @@ use std::hash::BuildHasherDefault;
 use std::io;
 use std::io::prelude::*;
 use std::sync::Arc;
-use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 
 #[cfg(feature = "file")]
-pub use priv_file::{init_file, load_config_file, Error};
+pub use crate::priv_file::{init_file, load_config_file, Error};
 
-use append::Append;
-use config::Config;
-use filter::Filter;
+use crate::append::Append;
+use crate::config::Config;
+use crate::filter::Filter;
 
 pub mod append;
 pub mod config;
-pub mod filter;
+pub mod encode;
 #[cfg(feature = "file")]
 pub mod file;
-pub mod encode;
+pub mod filter;
 #[cfg(feature = "file")]
 mod priv_file;
 #[cfg(feature = "console_writer")]
@@ -261,8 +217,8 @@ impl ConfiguredLogger {
             }
 
             ConfiguredLogger {
-                level: level,
-                appenders: appenders,
+                level,
+                appenders,
                 children: FnvHashMap::default(),
             }
         } else {
@@ -315,12 +271,12 @@ impl ConfiguredLogger {
 }
 
 struct Appender {
-    appender: Box<Append>,
-    filters: Vec<Box<Filter>>,
+    appender: Box<dyn Append>,
+    filters: Vec<Box<dyn Filter>>,
 }
 
 impl Appender {
-    fn append(&self, record: &Record) -> Result<(), Box<error::Error + Sync + Send>> {
+    fn append(&self, record: &Record) -> Result<(), Box<dyn error::Error + Sync + Send>> {
         for filter in &self.filters {
             match filter.filter(record) {
                 filter::Response::Accept => break,
@@ -355,7 +311,8 @@ impl SharedLogger {
 
             let mut root = ConfiguredLogger {
                 level: root.level(),
-                appenders: root.appenders()
+                appenders: root
+                    .appenders()
                     .iter()
                     .map(|appender| appender_map[&**appender])
                     .collect(),
@@ -380,43 +337,41 @@ impl SharedLogger {
             .into_iter()
             .map(|appender| {
                 let (_, appender, filters) = appender.unpack();
-                Appender {
-                    appender: appender,
-                    filters: filters,
-                }
+                Appender { appender, filters }
             })
             .collect();
 
-        SharedLogger {
-            root: root,
-            appenders: appenders,
-        }
+        SharedLogger { root, appenders }
     }
 }
 
+/// The fully configured log4rs Logger which is appropriate
+/// to use with the `log::set_boxed_logger` function.
 pub struct Logger(Arc<ArcSwap<SharedLogger>>);
 
 impl Logger {
+    /// Create a new `Logger` given a configuration.
     pub fn new(config: config::Config) -> Logger {
         Logger(Arc::new(ArcSwap::new(Arc::new(SharedLogger::new(config)))))
     }
 
+    /// Set the max log level above which everything will be filtered.
     pub fn max_log_level(&self) -> LevelFilter {
-        self.0.lease().root.max_log_level()
+        self.0.load().root.max_log_level()
     }
 }
 
 impl log::Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         self.0
-            .lease()
+            .load()
             .root
             .find(metadata.target())
             .enabled(metadata.level())
     }
 
     fn log(&self, record: &log::Record) {
-        let shared = self.0.lease();
+        let shared = self.0.load();
         shared
             .root
             .find(record.target())
@@ -424,7 +379,7 @@ impl log::Log for Logger {
     }
 
     fn flush(&self) {
-        for appender in &self.0.lease().appenders {
+        for appender in &self.0.load().appenders {
             appender.flush();
         }
     }
@@ -470,7 +425,7 @@ trait ConfigPrivateExt {
 }
 
 trait PrivateConfigAppenderExt {
-    fn unpack(self) -> (String, Box<Append>, Vec<Box<Filter>>);
+    fn unpack(self) -> (String, Box<dyn Append>, Vec<Box<dyn Filter>>);
 }
 
 #[cfg(test)]
@@ -494,49 +449,59 @@ mod test {
         let logger = super::Logger::new(config);
 
         assert!(logger.enabled(&Metadata::builder().level(Level::Warn).target("bar").build()));
-        assert!(!logger.enabled(&Metadata::builder()
-            .level(Level::Trace)
-            .target("bar")
-            .build()));
-        assert!(
-            logger.enabled(&Metadata::builder()
+        assert!(!logger.enabled(
+            &Metadata::builder()
+                .level(Level::Trace)
+                .target("bar")
+                .build()
+        ));
+        assert!(logger.enabled(
+            &Metadata::builder()
                 .level(Level::Debug)
                 .target("foo")
-                .build())
-        );
-        assert!(
-            logger.enabled(&Metadata::builder()
+                .build()
+        ));
+        assert!(logger.enabled(
+            &Metadata::builder()
                 .level(Level::Trace)
                 .target("foo::bar")
-                .build())
-        );
-        assert!(!logger.enabled(&Metadata::builder()
-            .level(Level::Error)
-            .target("foo::bar::baz")
-            .build()));
-        assert!(
-            logger.enabled(&Metadata::builder()
+                .build()
+        ));
+        assert!(!logger.enabled(
+            &Metadata::builder()
+                .level(Level::Error)
+                .target("foo::bar::baz")
+                .build()
+        ));
+        assert!(logger.enabled(
+            &Metadata::builder()
                 .level(Level::Debug)
                 .target("foo::bar::bazbuz")
-                .build())
-        );
-        assert!(!logger.enabled(&Metadata::builder()
-            .level(Level::Error)
-            .target("foo::bar::baz::buz")
-            .build()));
-        assert!(!logger.enabled(&Metadata::builder()
-            .level(Level::Warn)
-            .target("foo::baz::buz")
-            .build()));
-        assert!(!logger.enabled(&Metadata::builder()
-            .level(Level::Warn)
-            .target("foo::baz::buz::bar")
-            .build()));
-        assert!(
-            logger.enabled(&Metadata::builder()
+                .build()
+        ));
+        assert!(!logger.enabled(
+            &Metadata::builder()
+                .level(Level::Error)
+                .target("foo::bar::baz::buz")
+                .build()
+        ));
+        assert!(!logger.enabled(
+            &Metadata::builder()
+                .level(Level::Warn)
+                .target("foo::baz::buz")
+                .build()
+        ));
+        assert!(!logger.enabled(
+            &Metadata::builder()
+                .level(Level::Warn)
+                .target("foo::baz::buz::bar")
+                .build()
+        ));
+        assert!(logger.enabled(
+            &Metadata::builder()
                 .level(Level::Error)
                 .target("foo::baz::buz::bar")
-                .build())
-        );
+                .build()
+        ));
     }
 }

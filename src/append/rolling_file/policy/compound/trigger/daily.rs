@@ -2,20 +2,20 @@
 //!
 //! Requires the `daily_trigger` feature.
 
+// #[cfg(feature = "file")]
+// use serde::de;
 #[cfg(feature = "file")]
-use serde::de;
-#[cfg(feature = "file")]
-use std::ascii::AsciiExt;
+use serde_derive::Deserialize;
 use std::error::Error;
-#[cfg(feature = "file")]
-use std::fmt;
+// #[cfg(feature = "file")]
+// use std::fmt;
 
 use chrono::{Datelike, Local};
 
-use append::rolling_file::LogFile;
-use append::rolling_file::policy::compound::trigger::Trigger;
+use crate::append::rolling_file::LogFile;
+use crate::append::rolling_file::policy::compound::trigger::Trigger;
 #[cfg(feature = "file")]
-use file::{Deserialize, Deserializers};
+use crate::file::{Deserialize, Deserializers};
 
 static mut DAY: u32 = 0;
 
@@ -40,14 +40,14 @@ impl DailyTrigger {
 }
 
 impl Trigger for DailyTrigger {
-    fn trigger(&self, file: &LogFile) -> Result<bool, Box<Error + Sync + Send>> {
-        let mut roll = false;
+    fn trigger(&self, _file: &LogFile) -> Result<bool, Box<dyn Error + Sync + Send>> {
+        let mut _roll = false;
         unsafe {
             let last_day = DAY;
             DAY = Local::today().day();
-            roll = last_day != 0 && DAY != last_day;
+            _roll = last_day != 0 && DAY != last_day;
         }
-        Ok(roll)
+        Ok(_roll)
     }
 }
 
@@ -60,15 +60,15 @@ pub struct DailyTriggerDeserializer;
 
 #[cfg(feature = "file")]
 impl Deserialize for DailyTriggerDeserializer {
-    type Trait = Trigger;
+    type Trait = dyn Trigger;
 
     type Config = DailyTriggerConfig;
 
     fn deserialize(
         &self,
-        config: DailyTriggerConfig,
+        _config: DailyTriggerConfig,
         _: &Deserializers,
-    ) -> Result<Box<Trigger>, Box<Error + Sync + Send>> {
+    ) -> Result<Box<dyn Trigger>, Box<dyn Error + Sync + Send>> {
         Ok(Box::new(DailyTrigger::new()))
     }
 }

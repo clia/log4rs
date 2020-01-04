@@ -2,15 +2,17 @@
 //!
 //! Requires the `daily_file_roller` feature.
 
+#[cfg(feature = "file")]
+use serde_derive::Deserialize;
 use std::error::Error;
 use std::fs;
 use std::io;
 use std::path::Path;
 use chrono::Local;
 
-use append::rolling_file::policy::compound::roll::Roll;
+use crate::append::rolling_file::policy::compound::roll::Roll;
 #[cfg(feature = "file")]
-use file::{Deserialize, Deserializers};
+use crate::file::{Deserialize, Deserializers};
 
 /// Configuration for the fixed window roller.
 #[cfg(feature = "file")]
@@ -34,6 +36,7 @@ impl Compression {
             Compression::None => move_file(src, dst),
             #[cfg(feature = "gzip")]
             Compression::Gzip => {
+                #[cfg(feature = "flate2")]
                 use flate2;
                 use flate2::write::GzEncoder;
                 use std::fs::File;
@@ -92,7 +95,7 @@ impl DailyFileRoller {
 }
 
 impl Roll for DailyFileRoller {
-    fn roll(&self, file: &Path) -> Result<(), Box<Error + Sync + Send>> {
+    fn roll(&self, file: &Path) -> Result<(), Box<dyn Error + Sync + Send>> {
         if self.count == 0 {
             return fs::remove_file(file).map_err(Into::into);
         }
@@ -170,20 +173,16 @@ impl DailyFileRollerBuilder {
         self,
         pattern: &str,
         count: u32,
-    ) -> Result<DailyFileRoller, Box<Error + Sync + Send>> {
+    ) -> Result<DailyFileRoller, Box<dyn Error + Sync + Send>> {
         if !pattern.contains("{}") {
             return Err("pattern does not contain `{}`".into());
         }
 
         let compression = match Path::new(pattern).extension() {
             #[cfg(feature = "gzip")]
-            Some(e) if e == "gz" =>
-            {
-                Compression::Gzip
-            }
+            Some(e) if e == "gz" => Compression::Gzip,
             #[cfg(not(feature = "gzip"))]
-            Some(e) if e == "gz" =>
-            {
+            Some(e) if e == "gz" => {
                 return Err("gzip compression requires the `gzip` feature".into());
             }
             _ => Compression::None,
@@ -191,9 +190,9 @@ impl DailyFileRollerBuilder {
 
         Ok(DailyFileRoller {
             pattern: pattern.to_owned(),
-            compression: compression,
+            compression,
             base: self.base,
-            count: count,
+            count,
         })
     }
 }
@@ -222,7 +221,7 @@ pub struct DailyFileRollerDeserializer;
 
 #[cfg(feature = "file")]
 impl Deserialize for DailyFileRollerDeserializer {
-    type Trait = Roll;
+    type Trait = dyn Roll;
 
     type Config = DailyFileRollerConfig;
 
@@ -230,7 +229,7 @@ impl Deserialize for DailyFileRollerDeserializer {
         &self,
         config: DailyFileRollerConfig,
         _: &Deserializers,
-    ) -> Result<Box<Roll>, Box<Error + Sync + Send>> {
+    ) -> Result<Box<dyn Roll>, Box<dyn Error + Sync + Send>> {
         let mut builder = DailyFileRoller::builder();
         if let Some(base) = config.base {
             builder = builder.base(base);
@@ -247,7 +246,7 @@ mod test {
     use std::io::{Read, Write};
     use std::process::Command;
 
-    use append::rolling_file::policy::compound::roll::Roll;
+    use crate::append::rolling_file::policy::compound::roll::Roll;
     use super::*;
 
     #[test]

@@ -206,7 +206,7 @@ impl Default for Deserializers {
         #[cfg(feature = "daily_file_roller")]
         d.insert(
             "daily_file",
-            ::append::rolling_file::policy::compound::roll::daily_file::DailyFileRollerDeserializer,
+            append::rolling_file::policy::compound::roll::daily_file::DailyFileRollerDeserializer,
         );
 
         #[cfg(feature = "size_trigger")]
@@ -218,7 +218,7 @@ impl Default for Deserializers {
         #[cfg(feature = "daily_trigger")]
         d.insert(
             "daily",
-            ::append::rolling_file::policy::compound::trigger::daily::DailyTriggerDeserializer,
+            append::rolling_file::policy::compound::trigger::daily::DailyTriggerDeserializer,
         );
 
         #[cfg(feature = "json_encoder")]

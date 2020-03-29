@@ -88,24 +88,20 @@
 //!     Default: true
 //!     additive: false
 //! ```
-use humantime;
 use log::LevelFilter;
 use serde::de::{self, Deserialize as SerdeDeserialize, DeserializeOwned};
 use serde_derive::Deserialize;
 use serde_value::Value;
-use std::borrow::ToOwned;
-use std::collections::HashMap;
-use std::error;
-use std::fmt;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    borrow::ToOwned, collections::HashMap, error, fmt, marker::PhantomData, sync::Arc,
+    time::Duration,
+};
 use typemap::{Key, ShareCloneMap};
 
-use crate::append::{self, AppenderConfig};
-use crate::config;
-use crate::encode;
-use crate::filter;
+use crate::{
+    append::{self, AppenderConfig},
+    config, encode, filter,
+};
 
 /// A trait implemented by traits which are deserializable.
 pub trait Deserializable: 'static {
@@ -343,6 +339,7 @@ impl error::Error for Error {
 
 /// A raw deserializable log4rs configuration for xml.
 #[cfg(feature = "xml_format")]
+#[deprecated(since = "0.11.0")]
 #[derive(Deserialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct RawConfigXml {
@@ -358,6 +355,7 @@ pub struct RawConfigXml {
 
 /// Loggers section wrapper for xml configuration
 #[cfg(feature = "xml_format")]
+#[deprecated(since = "0.11.0")]
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct LoggersXml {
@@ -366,6 +364,7 @@ pub struct LoggersXml {
 }
 
 #[cfg(feature = "xml_format")]
+#[deprecated(since = "0.11.0")]
 impl Default for LoggersXml {
     fn default() -> Self {
         Self { loggers: vec![] }
@@ -516,6 +515,7 @@ fn root_level_default() -> LevelFilter {
 
 /// logger struct for xml configuration
 #[cfg(feature = "xml_format")]
+#[deprecated(since = "0.11.0")]
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 struct LoggerXml {

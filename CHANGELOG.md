@@ -8,6 +8,32 @@
 
 ### Fixed
 
+## [0.13.0]
+
+### New
+
+### Changed
+
+* Update `serde-xml-rs` to `0.4`.
+* Update `parking_lot` to `0.11`.
+
+### Fixed
+
+* Fix bug where both `pattern_encoder` and `json_encoder` features need to be active to use either.
+
+## [0.12.0]
+
+### New
+
+* Derived `Clone` for `Handle`.
+
+### Changed
+
+### Fixed
+
+* Build warnings
+* Docs typos
+
 ## [0.11.0]
 
 A performance issue was discovered with gzip and rolling logs, the `background_rotation` feature was

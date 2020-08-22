@@ -183,7 +183,9 @@
 //! For more examples see the (examples)[https://github.com/estk/log4rs/tree/master/examples] in the source.
 //!
 
+#![allow(where_clauses_object_safety, clippy::manual_non_exhaustive)]
 #![warn(missing_docs)]
+
 use arc_swap::ArcSwap;
 use fnv::FnvHasher;
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
@@ -419,6 +421,7 @@ pub fn init_config(config: config::Config) -> Result<Handle, SetLoggerError> {
 }
 
 /// A handle to the active logger.
+#[derive(Clone)]
 pub struct Handle {
     shared: Arc<ArcSwap<SharedLogger>>,
 }
